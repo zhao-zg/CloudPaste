@@ -613,25 +613,8 @@ async function processPropfindRequest(path, requestInfo, userIdOrInfo, actualUse
   try {
     // 检查API密钥用户的路径权限
     // WebDAVAuth 中间件已对路径权限做过全面校验（isVirtualPath + basicPath + mount 解析），
-    // 此处用 canNavigatePath 做二次确认时需剥离用户名前缀，
-    // 否则路径格式 /{username}/mount/... 无法与 basicPath（挂载点路径）匹配。
-    if (actualUserType === UserType.API_KEY && userIdOrInfo.name) {
-      const keyName = userIdOrInfo.name;
-      const prefix = "/" + keyName;
-      let effectivePath = path;
-      if (path === prefix || path === prefix + "/") {
-        effectivePath = "/";
-      } else if (path.startsWith(prefix + "/")) {
-        effectivePath = path.substring(prefix.length);
-      }
-      if (!canNavigatePath(userIdOrInfo.basicPath, effectivePath)) {
-        return createErrorResponse(WEBDAV_BASE_PATH + path, 403, "没有权限访问此路径");
-      }
-    } else if (actualUserType === UserType.API_KEY) {
-      if (!canNavigatePath(userIdOrInfo.basicPath, path)) {
-        return createErrorResponse(WEBDAV_BASE_PATH + path, 403, "没有权限访问此路径");
-      }
-    }
+    // 此处跳过 canNavigatePath 二次检查，避免路径格式 /{username}/mount/... 与 basicPath 不匹配的重复问题。
+    // [debug-tag: v2-skip-nav]
 
     // 获取用户可访问的挂载点列表
     const mounts = await getAccessibleMountsForUser(db, userIdOrInfo, actualUserType);

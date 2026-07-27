@@ -408,6 +408,15 @@ export async function getAccessibleMountsByBasicPath(db, basicPath, subjectType,
       return true;
     }
 
+    // 情况4：后缀匹配（WebDAV 场景中挂载路径含用户名前缀，如 mount_path=/zqs/2区使用, basicPath=/2区使用）
+    if (normalizedMountPath.endsWith(normalizedBasicPath) || normalizedMountPath.endsWith(normalizedBasicPath + "/")) {
+      const suffixIndex = normalizedMountPath.lastIndexOf(normalizedBasicPath);
+      const charBefore = normalizedMountPath[suffixIndex - 1];
+      if (!charBefore || charBefore === "/") {
+        return true;
+      }
+    }
+
     return false;
   });
 

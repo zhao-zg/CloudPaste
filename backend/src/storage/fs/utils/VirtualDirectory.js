@@ -44,8 +44,16 @@ export async function getVirtualDirectoryListing(mounts, path, basicPath = null)
     const normalizedBasicPath = basicPath.replace(/\/+$/, "");
     const normalizedCurrentPath = path.replace(/\/+$/, "") || "/";
 
-    // 只有当前路径是基本路径或其子路径时才有权限
-    hasPermissionForCurrentPath = normalizedCurrentPath === normalizedBasicPath || normalizedCurrentPath.startsWith(normalizedBasicPath + "/");
+    // 前缀匹配：当前路径是 basicPath 或其子路径
+    const prefixMatch = normalizedCurrentPath === normalizedBasicPath || normalizedCurrentPath.startsWith(normalizedBasicPath + "/");
+    // 后缀匹配：WebDAV 场景中路径含用户名前缀，如 path=/zqs/2区使用, basicPath=/2区使用
+    let suffixMatch = false;
+    if (!prefixMatch && (normalizedCurrentPath.endsWith(normalizedBasicPath) || normalizedCurrentPath.endsWith(normalizedBasicPath + "/"))) {
+      const idx = normalizedCurrentPath.lastIndexOf(normalizedBasicPath);
+      const ch = normalizedCurrentPath[idx - 1];
+      suffixMatch = !ch || ch === "/";
+    }
+    hasPermissionForCurrentPath = prefixMatch || suffixMatch;
   }
 
   const result = {
@@ -79,8 +87,15 @@ export async function getVirtualDirectoryListing(mounts, path, basicPath = null)
           const normalizedBasicPath = basicPath.replace(/\/+$/, "");
           const normalizedMountPath = normalizedMountPath.replace(/\/+$/, "") || "/";
 
-          // 只有挂载点在基本路径范围内才显示
-          if (normalizedMountPath === normalizedBasicPath || normalizedMountPath.startsWith(normalizedBasicPath + "/")) {
+          // 检查基本路径权限（前缀匹配 + 后缀匹配）
+          const bpMountPrefix = normalizedMountPath === normalizedBasicPath || normalizedMountPath.startsWith(normalizedBasicPath + "/");
+          let bpMountSuffix = false;
+          if (!bpMountPrefix && (normalizedMountPath.endsWith(normalizedBasicPath) || normalizedMountPath.endsWith(normalizedBasicPath + "/"))) {
+            const idx = normalizedMountPath.lastIndexOf(normalizedBasicPath);
+            const ch = normalizedMountPath[idx - 1];
+            bpMountSuffix = !ch || ch === "/";
+          }
+          if (bpMountPrefix || bpMountSuffix) {
             mountEntries.push({
               name: mount.name,
               path: normalizedMountPath,
@@ -112,8 +127,15 @@ export async function getVirtualDirectoryListing(mounts, path, basicPath = null)
             const normalizedBasicPath = basicPath.replace(/\/+$/, "");
             const normalizedDirPath = (path + firstDir).replace(/\/+$/, "");
 
-            // 检查目录路径是否在基本路径范围内
-            if (normalizedDirPath === normalizedBasicPath || normalizedDirPath.startsWith(normalizedBasicPath + "/")) {
+            // 检查目录路径是否在基本路径范围内（前缀 + 后缀匹配）
+            const dirPrefix = normalizedDirPath === normalizedBasicPath || normalizedDirPath.startsWith(normalizedBasicPath + "/");
+            let dirSuffix = false;
+            if (!dirPrefix && (normalizedDirPath.endsWith(normalizedBasicPath) || normalizedDirPath.endsWith(normalizedBasicPath + "/"))) {
+              const idx = normalizedDirPath.lastIndexOf(normalizedBasicPath);
+              const ch = normalizedDirPath[idx - 1];
+              dirSuffix = !ch || ch === "/";
+            }
+            if (dirPrefix || dirSuffix) {
               directories.add(firstDir);
             }
             // 检查基本路径是否在目录路径范围内
