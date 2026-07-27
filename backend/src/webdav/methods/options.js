@@ -33,7 +33,7 @@ function handleWebDAVOptionsRequest(c, path, userType) {
   const clientInfo = detectClientInfo(c);
 
   // 构建响应头
-  const headers = buildWebDAVResponseHeaders(allowedMethods, davLevel, clientInfo);
+  const headers = buildWebDAVResponseHeaders(c, allowedMethods, davLevel, clientInfo);
 
   // 记录日志
   logOptionsRequest(c, path, userType, davLevel, allowedMethods);
@@ -90,7 +90,7 @@ function detectClientInfo(c) {
  * @param {Object} clientInfo - 客户端信息
  * @returns {Object} 响应头对象
  */
-function buildWebDAVResponseHeaders(allowedMethods, davLevel, clientInfo) {
+function buildWebDAVResponseHeaders(c, allowedMethods, davLevel, clientInfo) {
   // 客户端特定头
   const clientSpecificHeaders = {};
   if (clientInfo.isWindows) {
@@ -100,8 +100,12 @@ function buildWebDAVResponseHeaders(allowedMethods, davLevel, clientInfo) {
     clientSpecificHeaders["X-DAV-Powered-By"] = "CloudPaste";
   }
 
+  // 从请求中提取Origin，用于动态CORS处理
+  const requestOrigin = c.req.header("Origin") || null;
+
   // 使用统一的WebDAV头部管理工具，覆盖默认的Allow头
   return getStandardWebDAVHeaders({
+    requestOrigin,
     customHeaders: {
       DAV: davLevel,
       Allow: allowedMethods.join(", "),

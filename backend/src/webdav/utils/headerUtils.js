@@ -32,9 +32,15 @@ export function getStandardWebDAVHeaders(options = {}) {
     headers.Public = config.METHODS.join(", ");
   }
 
-  // CORS头部
+  // CORS头部 - 动态处理：带Origin时回显Origin+凭据，无Origin时用*兼容原生客户端
   if (includeCORS) {
-    headers["Access-Control-Allow-Origin"] = config.HEADERS["Access-Control-Allow-Origin"];
+    const requestOrigin = options.requestOrigin || null;
+    if (requestOrigin) {
+      headers["Access-Control-Allow-Origin"] = requestOrigin;
+      headers["Access-Control-Allow-Credentials"] = "true";
+    } else {
+      headers["Access-Control-Allow-Origin"] = config.HEADERS["Access-Control-Allow-Origin"];
+    }
     headers["Access-Control-Allow-Methods"] = config.HEADERS["Access-Control-Allow-Methods"];
     headers["Access-Control-Allow-Headers"] = config.HEADERS["Access-Control-Allow-Headers"];
     headers["Access-Control-Expose-Headers"] = config.HEADERS["Access-Control-Expose-Headers"];

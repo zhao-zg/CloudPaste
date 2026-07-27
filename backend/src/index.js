@@ -167,16 +167,22 @@ app.use("*", securityContext());
 // 必须在其他路由注册之前，确保优先匹配
 app.options("/", (c) => {
   // 返回标准WebDAV能力声明，与/dav路径保持一致
+  // 动态CORS处理：有Origin时回显Origin+凭据，无Origin时用*兼容原生客户端
+  const origin = c.req.header("Origin");
+  const corsOrigin = origin || "*";
   const headers = {
     Allow: "OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, COPY, MOVE, LOCK, UNLOCK, PROPPATCH",
     DAV: "1, 2",
     "MS-Author-Via": "DAV",
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": corsOrigin,
     "Access-Control-Allow-Methods": "OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, COPY, MOVE, LOCK, UNLOCK, PROPPATCH",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, Depth, Destination, If, Lock-Token, Overwrite, X-Custom-Auth-Key",
     "Access-Control-Expose-Headers": "DAV, Lock-Token, MS-Author-Via",
     "Access-Control-Max-Age": "86400",
   };
+  if (origin) {
+    headers["Access-Control-Allow-Credentials"] = "true";
+  }
 
   console.log("根路径WebDAV OPTIONS请求 - 客户端兼容性支持");
   return new Response("", { status: 200, headers });
