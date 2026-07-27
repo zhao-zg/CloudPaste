@@ -534,6 +534,26 @@ function createErrorResponse(href, status, message) {
 // ===== RFC 4918标准实现：主要处理函数 =====
 
 /**
+ * 计算 WebDAV href 前缀
+ * 从 originalPath 与 fsPath 的差值推导用户名前缀，避免路径重复
+ * 例如 originalPath=/zqs/2区使用/, fsPath=/2区使用/ → 返回 /dav/zqs
+ * @param {string} originalPath - 含用户名前缀的原始请求路径
+ * @param {string} fsPath - 剥离用户名前缀后的文件系统路径
+ * @returns {string} WebDAV href 前缀，如 /dav/zqs
+ */
+function computeDavHrefPrefix(originalPath, fsPath) {
+  if (!originalPath || originalPath === fsPath) return WEBDAV_BASE_PATH;
+  const normalizedOriginal = originalPath.replace(/\/+$/, "");
+  const normalizedFs = fsPath.replace(/\/+$/, "");
+  // 如果 originalPath 以 fsPath 结尾，则用户名前缀 = originalPath - fsPath
+  if (normalizedFs && normalizedOriginal.endsWith(normalizedFs)) {
+    return WEBDAV_BASE_PATH + normalizedOriginal.substring(0, normalizedOriginal.length - normalizedFs.length);
+  }
+  // 回退：无法推导时直接使用 originalPath
+  return WEBDAV_BASE_PATH + normalizedOriginal;
+}
+
+/**
  * 主要的PROPFIND处理函数
  * 符合RFC 4918标准，修复所有标准违反问题
  * @param {Object} c - Hono上下文
@@ -696,9 +716,8 @@ async function handleVirtualDirectoryPropfind(mounts, fsPath, basicPath, request
     // 需要将其映射回原始路径空间以构建正确的 WebDAV href。
     if (requestInfo.depth === "1" && result.items) {
       // 计算路径前缀：/dav/{username}/ 或 /dav/（admin 用户）
-      const hrefPrefix = originalPath && originalPath !== fsPath
-        ? "/dav" + (originalPath.replace(/\/+$/, "") || "")
-        : WEBDAV_BASE_PATH;
+      // 从 originalPath 与 fsPath 的差值推导用户名前缀，避免路径重复
+      const hrefPrefix = computeDavHrefPrefix(originalPath, fsPath);
 
       for (const item of result.items) {
         // 将 item.path（基于 fsPath）映射到 WebDAV 路径空间
@@ -766,9 +785,8 @@ async function handleStoragePropfind(fileSystem, fsPath, requestInfo, userIdOrIn
     }
 
     // 计算 WebDAV href 前缀：/dav/{username}/ 或 /dav/
-    const hrefPrefix = originalPath && originalPath !== fsPath
-      ? "/dav" + (originalPath.replace(/\/+$/, "") || "")
-      : "/dav";
+    // 从 originalPath 与 fsPath 的差值推导用户名前缀，避免路径重复
+    const hrefPrefix = computeDavHrefPrefix(originalPath, fsPath);
 
     const responses = [];
 
