@@ -617,11 +617,9 @@ async function processPropfindRequest(path, requestInfo, userIdOrInfo, actualUse
 
     // 获取用户可访问的挂载点列表
     const mounts = await getAccessibleMountsForUser(db, userIdOrInfo, actualUserType);
-    console.log(`[PROPFIND-DEBUG] path=${path}, userType=${actualUserType}, mounts=${mounts?.length}, basicPath=${userIdOrInfo.basicPath}, keyName=${userIdOrInfo.name}`);
 
     // 检查是否为虚拟路径
     const isVPath = isVirtualPath(path, mounts);
-    console.log(`[PROPFIND-DEBUG] isVirtualPath=${isVPath}, mounts_list=${JSON.stringify(mounts?.map(m => m.mount_path))}`);
     if (isVPath) {
       // 处理虚拟目录
       const basicPath = actualUserType === UserType.API_KEY ? userIdOrInfo.basicPath : null;
