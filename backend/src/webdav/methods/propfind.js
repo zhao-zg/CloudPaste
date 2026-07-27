@@ -614,13 +614,15 @@ async function processPropfindRequest(path, requestInfo, userIdOrInfo, actualUse
     // 检查API密钥用户的路径权限
     // WebDAVAuth 中间件已对路径权限做过全面校验（isVirtualPath + basicPath + mount 解析），
     // 此处跳过 canNavigatePath 二次检查，避免路径格式 /{username}/mount/... 与 basicPath 不匹配的重复问题。
-    // [debug-tag: v2-skip-nav]
 
     // 获取用户可访问的挂载点列表
     const mounts = await getAccessibleMountsForUser(db, userIdOrInfo, actualUserType);
+    console.log(`[PROPFIND-DEBUG] path=${path}, userType=${actualUserType}, mounts=${mounts?.length}, basicPath=${userIdOrInfo.basicPath}, keyName=${userIdOrInfo.name}`);
 
     // 检查是否为虚拟路径
-    if (isVirtualPath(path, mounts)) {
+    const isVPath = isVirtualPath(path, mounts);
+    console.log(`[PROPFIND-DEBUG] isVirtualPath=${isVPath}, mounts_list=${JSON.stringify(mounts?.map(m => m.mount_path))}`);
+    if (isVPath) {
       // 处理虚拟目录
       const basicPath = actualUserType === UserType.API_KEY ? userIdOrInfo.basicPath : null;
       return await handleVirtualDirectoryPropfind(mounts, path, basicPath, requestInfo);
