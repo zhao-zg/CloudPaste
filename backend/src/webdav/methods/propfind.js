@@ -617,6 +617,10 @@ async function processPropfindRequest(path, requestInfo, userIdOrInfo, actualUse
 
     // 获取用户可访问的挂载点列表
     const mounts = await getAccessibleMountsForUser(db, userIdOrInfo, actualUserType);
+    console.log(`[PROPFIND] path=${path}, fsPath pending, userType=${actualUserType}, mounts=${mounts?.length}, keyName=${userIdOrInfo?.name}, basicPath=${userIdOrInfo?.basicPath}`);
+    if (mounts?.length > 0) {
+      console.log(`[PROPFIND] mount[0]=${JSON.stringify({id: mounts[0].id, name: mounts[0].name, mount_path: mounts[0].mount_path, is_public: mounts[0].is_public})}`);
+    }
 
     // 对 API Key 用户，剥离用户名前缀后再做虚拟路径判断：
     // path 可能是 /zqs/ 或 /zqs/2区使用/，而挂载点路径是 /2区使用/，
