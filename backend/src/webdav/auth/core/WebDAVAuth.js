@@ -45,6 +45,7 @@ export class WebDAVAuth {
     try {
       // 1. 检查基础路径权限
       const basicPath = keyInfo.basicPath || "/";
+      console.log(`[WebDAV调试-路径权限] basicPath=${basicPath}, requestPath=${path}, method=${method}`);
       if (!this.checkBasicPathPermission(basicPath, path)) {
         console.log(`WebDAV基础路径权限检查失败: basicPath=${basicPath}, requestPath=${path}`);
         return false;
@@ -197,6 +198,7 @@ export class WebDAVAuth {
         }
 
         const hasPathPermission = await this.validateWebDAVPathPermission(apiKeyInfo, requestPath, c.req.method, c);
+        console.log(`[WebDAV调试] basicPath=${apiKeyInfo.basicPath}, requestPath=${requestPath}, hasPathPermission=${hasPathPermission}, keyId=${apiKeyInfo.id}`);
         if (!hasPathPermission) {
           return {
             type: AuthResultType.FORBIDDEN,
