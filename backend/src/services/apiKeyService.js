@@ -383,7 +383,32 @@ export async function getAccessibleMountsByBasicPath(db, basicPath, subjectType,
       return true;
     }
 
-    // 对于对象存储类挂载点，必须使用 is_public = 1 的配置（无 ACL 白名单兜底时）
+    // 检查 basicPath 是否匹配（路径权限判断）
+    // basicPath 匹配的挂载点对已认证的 API Key 用户应始终可访问，
+    // 不受存储配置 is_public 限制（WebDAV 场景下用户已通过认证）
+    const normalizedBasicPath = basicPath === "/" ? "/" : basicPath.replace(/\/+$/, "");
+    const normalizedMountPath = mount.mount_path.replace(/\/+$/, "") || "/";
+    let basicPathMatch = false;
+    if (normalizedBasicPath === "/") {
+      basicPathMatch = true;
+    } else if (normalizedMountPath === normalizedBasicPath || normalizedMountPath.startsWith(normalizedBasicPath + "/")) {
+      basicPathMatch = true;
+    } else if (normalizedBasicPath.startsWith(normalizedMountPath + "/")) {
+      basicPathMatch = true;
+    } else if (normalizedMountPath.endsWith(normalizedBasicPath) || normalizedMountPath.endsWith(normalizedBasicPath + "/")) {
+      const suffixIndex = normalizedMountPath.lastIndexOf(normalizedBasicPath);
+      const charBefore = normalizedMountPath[suffixIndex - 1];
+      if (!charBefore || charBefore === "/") {
+        basicPathMatch = true;
+      }
+    }
+
+    // basicPath 匹配的挂载点对 API Key 用户放行（已认证）
+    if (basicPathMatch) {
+      return true;
+    }
+
+    // 对于 basicPath 不匹配的挂载点，必须使用 is_public = 1 的配置
     if (mount.storage_config_id && mount.is_public !== 1) {
       inaccessibleMounts.push(mount.name);
       return false;
@@ -394,40 +419,8 @@ export async function getAccessibleMountsByBasicPath(db, basicPath, subjectType,
       return false;
     }
 
-    // 然后检查是否命中主体的存储 ACL 白名单（如果有）
-    if (allowedConfigIdsSet && mount.storage_config_id && !allowedConfigIdsSet.has(mount.storage_config_id)) {
-      return false;
-    }
-
-    // 最后检查路径权限（basicPath 与挂载路径的父子关系）
-    const normalizedBasicPath = basicPath === "/" ? "/" : basicPath.replace(/\/+$/, "");
-    const normalizedMountPath = mount.mount_path.replace(/\/+$/, "") || "/";
-
-    // 情况1：基本路径是根路径，允许访问所有公开配置的挂载点
-    if (normalizedBasicPath === "/") {
-      return true;
-    }
-
-    // 情况2：基本路径允许访问挂载点路径（基本路径是挂载点的父级或相同）
-    if (normalizedMountPath === normalizedBasicPath || normalizedMountPath.startsWith(normalizedBasicPath + "/")) {
-      return true;
-    }
-
-    // 情况3：挂载点路径是基本路径的父级（基本路径是挂载点的子目录）
-    if (normalizedBasicPath.startsWith(normalizedMountPath + "/")) {
-      return true;
-    }
-
-    // 情况4：后缀匹配（WebDAV 场景中挂载路径含用户名前缀，如 mount_path=/zqs/2区使用, basicPath=/2区使用）
-    if (normalizedMountPath.endsWith(normalizedBasicPath) || normalizedMountPath.endsWith(normalizedBasicPath + "/")) {
-      const suffixIndex = normalizedMountPath.lastIndexOf(normalizedBasicPath);
-      const charBefore = normalizedMountPath[suffixIndex - 1];
-      if (!charBefore || charBefore === "/") {
-        return true;
-      }
-    }
-
-    return false;
+    // basicPath 不匹配且无 ACL 白名单时，仅允许公开配置的挂载点
+    return true;
   });
 
   // 如果有无法访问的挂载点，统一输出一条日志
