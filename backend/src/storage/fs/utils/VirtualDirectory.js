@@ -39,8 +39,9 @@ export async function getVirtualDirectoryListing(mounts, path, basicPath = null)
   path = normalizePath(path, true);
 
   // 检查当前路径是否在基本路径权限范围内
+  // 根目录（/）始终允许导航，因为用户需要通过根目录浏览到其挂载点
   let hasPermissionForCurrentPath = true;
-  if (basicPath && basicPath !== "/") {
+  if (basicPath && basicPath !== "/" && path !== "/" && path !== "//") {
     const normalizedBasicPath = basicPath.replace(/\/+$/, "");
     const normalizedCurrentPath = path.replace(/\/+$/, "") || "/";
 
