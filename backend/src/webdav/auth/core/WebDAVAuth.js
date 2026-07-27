@@ -48,7 +48,7 @@ export class WebDAVAuth {
       // 剥离 WebDAV 路径中的用户名前缀：
       // WebDAV 路径格式为 /{username}/mount/... ，而 basicPath 是挂载点路径（不含用户名前缀），
       // 例如 path=/zqs/2区使用/ → effectivePath=/2区使用/ ，与 basicPath=/2区使用/ 可直接前缀匹配。
-      const effectivePath = this._stripUsernamePrefix(path, keyInfo.name);
+      const effectivePath = this._stripUsernamePrefix(path, keyInfo.key || keyInfo.name);
 
       // 0. 用户根目录始终允许导航（PROPFIND 需要列出挂载点）
       if (effectivePath === "/" || effectivePath === "//") {
@@ -95,6 +95,7 @@ export class WebDAVAuth {
    */
   _stripUsernamePrefix(path, keyName) {
     if (!keyName) return path;
+    // keyName 应为 API 密钥值（key 字段），即 Basic Auth 用户名，也是 URL 路径中的前缀
     const prefix = "/" + keyName;
     if (path === prefix || path === prefix + "/") {
       return "/"; // 用户根目录

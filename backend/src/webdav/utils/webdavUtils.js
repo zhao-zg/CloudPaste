@@ -96,8 +96,9 @@ export function parseDestinationPath(destination) {
  * @returns {string} 剥离用户名前缀后的文件系统路径
  */
 export function stripUsernamePrefix(path, userIdOrInfo, userType) {
-  if (userType === "apiKey" && typeof userIdOrInfo === "object" && userIdOrInfo?.name) {
-    const prefix = "/" + userIdOrInfo.name;
+  if (userType === "apiKey" && typeof userIdOrInfo === "object" && (userIdOrInfo?.key || userIdOrInfo?.name)) {
+    const keyId = userIdOrInfo.key || userIdOrInfo.name;
+    const prefix = "/" + keyId;
     if (path === prefix || path === prefix + "/") {
       return "/";
     }

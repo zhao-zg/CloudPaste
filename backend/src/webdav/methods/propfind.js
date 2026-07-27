@@ -579,6 +579,7 @@ export async function handlePropfind(c, path, userId, userType, db) {
         userIdOrInfo = {
           id: userId.id,
           name: userId.name,
+          key: userId.key,  // API 密钥值（即 Basic Auth 用户名 / URL 路径前缀）
           basicPath: userId.basicPath,
           permissions: userId.permissions || {},
         };
@@ -625,11 +626,12 @@ async function processPropfindRequest(path, requestInfo, userIdOrInfo, actualUse
     }
 
     // 对 API Key 用户，剥离用户名前缀后再做虚拟路径判断：
-    // path 可能是 /zqs/ 或 /zqs/2区使用/，而挂载点路径是 /2区使用/，
-    // 不剥离前缀会导致 isVirtualPath 和 getVirtualDirectoryListing 无法匹配。
+    // WebDAV URL 格式为 /{key_value}/mount/...，其中 key_value 是 API 密钥值（Basic Auth 用户名），
+    // 例如 path=/zqs/2区使用/，key 值为 "zqs"，剥离后 fsPath=/2区使用/
     let fsPath = path;
-    if (actualUserType === UserType.API_KEY && userIdOrInfo.name) {
-      const prefix = "/" + userIdOrInfo.name;
+    if (actualUserType === UserType.API_KEY && (userIdOrInfo.key || userIdOrInfo.name)) {
+      const keyId = userIdOrInfo.key || userIdOrInfo.name;
+      const prefix = "/" + keyId;
       if (path === prefix || path === prefix + "/") {
         fsPath = "/";
       } else if (path.startsWith(prefix + "/")) {
@@ -645,7 +647,7 @@ async function processPropfindRequest(path, requestInfo, userIdOrInfo, actualUse
       const result = await handleVirtualDirectoryPropfind(mounts, fsPath, basicPath, requestInfo, path);
       // 临时调试：附加关键信息到响应头，便于诊断根目录为空的问题
       const debugHeaders = new Headers(result.headers);
-      debugHeaders.set('X-WebDAV-Debug', `mounts=${mounts?.length}|fsPath=${fsPath}|basicPath=${basicPath}|keyName=${userIdOrInfo?.name}`);
+      debugHeaders.set('X-WebDAV-Debug', `mounts=${mounts?.length}|fsPath=${fsPath}|basicPath=${basicPath}|key=${userIdOrInfo?.key}|name=${userIdOrInfo?.name}`);
       return new Response(result.body, { status: result.status, headers: debugHeaders });
     }
 
