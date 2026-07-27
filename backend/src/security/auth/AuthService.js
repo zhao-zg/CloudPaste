@@ -317,6 +317,9 @@ export class AuthService {
 
   /**
    * 检查基础路径权限
+   * @param {string} basicPath - 用户的基础路径
+   * @param {string} requestPath - 请求的路径
+   * @returns {boolean} 是否有权限
    */
   checkBasicPathPermission(basicPath, requestPath) {
     if (!basicPath || !requestPath) {
@@ -332,8 +335,25 @@ export class AuthService {
       return true;
     }
 
-    // 检查请求路径是否在基本路径范围内
-    return normalizeRequestPath === normalizeBasicPath || normalizeRequestPath.startsWith(normalizeBasicPath + "/");
+    // 情况1：请求路径以基础路径开头（前缀匹配）
+    if (normalizeRequestPath === normalizeBasicPath || normalizeRequestPath.startsWith(normalizeBasicPath + "/")) {
+      return true;
+    }
+
+    // 情况2：基础路径是请求路径的尾部（后缀匹配）
+    // 例如 basicPath=/2区使用, requestPath=/zqs/2区使用 → 匹配
+    // 这处理了 WebDAV 等场景中请求路径包含用户名前缀、
+    // 而 basicPath 只是挂载点路径（不含前缀）的情况
+    if (normalizeRequestPath.endsWith(normalizeBasicPath) || normalizeRequestPath.endsWith(normalizeBasicPath + "/")) {
+      // 确保后缀对齐在路径段边界上，避免 /aaa-bbb 误匹配 /bbb
+      const suffixIndex = normalizeRequestPath.lastIndexOf(normalizeBasicPath);
+      const charBefore = normalizeRequestPath[suffixIndex - 1];
+      if (!charBefore || charBefore === "/") {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
 

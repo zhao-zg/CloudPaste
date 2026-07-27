@@ -43,23 +43,33 @@ export class WebDAVAuth {
    */
   async validateWebDAVPathPermission(keyInfo, path, method, c) {
     try {
-      // 1. 检查基础路径权限
       const basicPath = keyInfo.basicPath || "/";
-      if (!this.checkBasicPathPermission(basicPath, path)) {
-        console.log(`WebDAV基础路径权限检查失败: basicPath=${basicPath}, requestPath=${path}`);
-        return false;
-      }
 
-      const repositoryFactory = c.get("repos");
-      const accessibleMounts = await getAccessibleMountsForUser(this.db, keyInfo, "apiKey", repositoryFactory);
+      // 剥离 WebDAV 路径中的用户名前缀：
+      // WebDAV 路径格式为 /{username}/mount/... ，而 basicPath 是挂载点路径（不含用户名前缀），
+      // 例如 path=/zqs/2区使用/ → effectivePath=/2区使用/ ，与 basicPath=/2区使用/ 可直接前缀匹配。
+      const effectivePath = this._stripUsernamePrefix(path, keyInfo.name);
 
-      // 2. 虚拟路径（根目录 / 以及不直接落在具体挂载点上的中间目录）：。
-      if (isVirtualPath(path, accessibleMounts)) {
-        console.log(`WebDAV虚拟路径访问允许: basicPath=${basicPath}, requestPath=${path}`);
+      // 0. 用户根目录始终允许导航（PROPFIND 需要列出挂载点）
+      if (effectivePath === "/" || effectivePath === "//") {
         return true;
       }
 
-      // 3. 实际存储路径：保持原有挂载点 + 存储 ACL 校验逻辑，
+      // 1. 虚拟路径优先检查（根目录 / 以及不直接落在具体挂载点上的中间目录）
+      //    虚拟路径是导航中间目录，只要用户已认证就允许访问，
+      //    实际的数据操作（GET/PUT/DELETE）在挂载点解析阶段会失败。
+      const repositoryFactory = c.get("repos");
+      const accessibleMounts = await getAccessibleMountsForUser(this.db, keyInfo, "apiKey", repositoryFactory);
+      if (isVirtualPath(path, accessibleMounts)) {
+        return true;
+      }
+
+      // 2. 基础路径权限检查（使用剥离用户名前缀后的路径）
+      if (!this.checkBasicPathPermission(basicPath, effectivePath)) {
+        return false;
+      }
+
+      // 3. 实际存储路径：保持原有挂载点 + 存储 ACL 校验逻辑
       const { getEncryptionSecret } = await import("../../../utils/environmentUtils.js");
       const mountManager = new MountManager(this.db, getEncryptionSecret(c), repositoryFactory, { env: c.env });
 
@@ -67,13 +77,32 @@ export class WebDAVAuth {
         await mountManager.getDriverByPath(path, keyInfo, "apiKey");
         return true;
       } catch (mountError) {
-        console.log(`WebDAV挂载点检查失败: ${mountError.message}`);
         return false;
       }
     } catch (error) {
       console.error("WebDAV路径权限检查失败:", error);
       return false;
     }
+  }
+
+  /**
+   * 剥离 WebDAV 路径中的用户名前缀
+   * WebDAV 路径格式为 /{username}/mount/... ，而 basicPath 是挂载点路径（不含用户名前缀），
+   * 剥离后可与 basicPath 直接做前缀匹配。
+   * @param {string} path - 原始请求路径
+   * @param {string} keyName - API 密钥名称（即用户名）
+   * @returns {string} 剥离用户名前缀后的路径
+   */
+  _stripUsernamePrefix(path, keyName) {
+    if (!keyName) return path;
+    const prefix = "/" + keyName;
+    if (path === prefix || path === prefix + "/") {
+      return "/"; // 用户根目录
+    }
+    if (path.startsWith(prefix + "/")) {
+      return path.substring(prefix.length); // /mount_path/...
+    }
+    return path; // 不含预期前缀，原样返回
   }
 
   /**

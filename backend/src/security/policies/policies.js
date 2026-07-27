@@ -103,14 +103,14 @@ const Policies = {
   },
   "webdav.read": {
     permissions: [Permission.WEBDAV_READ],
-    pathCheck: true,
-    pathResolver: getWebDAVPath,
+    // pathCheck 已由 WebDAVAuth.validateWebDAVPathPermission 全面处理，
+    // 此处禁用以避免 authorize 中间件与 WebDAVAuth 的路径检查逻辑冲突
+    pathCheck: false,
     message: "缺少 WebDAV 读取权限",
   },
   "webdav.manage": {
     permissions: [Permission.WEBDAV_MANAGE],
-    pathCheck: true,
-    pathResolver: getWebDAVPath,
+    pathCheck: false,
     message: "缺少 WebDAV 管理权限",
   },
   "pastes.manage": {
