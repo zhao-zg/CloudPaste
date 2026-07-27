@@ -198,11 +198,10 @@ export class WebDAVAuth {
         }
 
         const hasPathPermission = await this.validateWebDAVPathPermission(apiKeyInfo, requestPath, c.req.method, c);
-        console.log(`[WebDAV调试] basicPath=${apiKeyInfo.basicPath}, requestPath=${requestPath}, hasPathPermission=${hasPathPermission}, keyId=${apiKeyInfo.id}`);
         if (!hasPathPermission) {
           return {
             type: AuthResultType.FORBIDDEN,
-            message: "路径权限不足",
+            message: `路径权限不足 [debug: basicPath=${apiKeyInfo.basicPath || "/"}, path=${requestPath}, keyId=${apiKeyInfo.id || "unknown"}]`,
           };
         }
       }
