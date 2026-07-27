@@ -45,7 +45,6 @@ export class WebDAVAuth {
     try {
       // 1. 检查基础路径权限
       const basicPath = keyInfo.basicPath || "/";
-      console.log(`[WebDAV调试-路径权限] basicPath=${basicPath}, requestPath=${path}, method=${method}`);
       if (!this.checkBasicPathPermission(basicPath, path)) {
         console.log(`WebDAV基础路径权限检查失败: basicPath=${basicPath}, requestPath=${path}`);
         return false;
@@ -92,8 +91,24 @@ export class WebDAVAuth {
     const normalizedBasicPath = basicPath.endsWith("/") ? basicPath : basicPath + "/";
     const normalizedRequestPath = requestPath.startsWith("/") ? requestPath : "/" + requestPath;
 
-    // 检查请求路径是否在基础路径范围内
-    return normalizedRequestPath.startsWith(normalizedBasicPath) || normalizedRequestPath === basicPath;
+    // 情况1：请求路径以基础路径开头（原有逻辑）
+    // 例如 basicPath=/zqs, requestPath=/zqs/2区使用/ → 匹配
+    if (normalizedRequestPath.startsWith(normalizedBasicPath) || normalizedRequestPath === basicPath) {
+      return true;
+    }
+
+    // 情况2：基础路径是请求路径的尾部（后缀匹配）
+    // 例如 basicPath=/2区使用, requestPath=/zqs/2区使用/ → 匹配
+    // 这处理了管理面板 UI 中 basicPath 只能选择挂载点路径，
+    // 而挂载点路径不包含用户子路径前缀的场景
+    const normalizedBasicPathNoSlash = normalizedBasicPath.replace(/\/+$/, "");
+    if (normalizedRequestPath.endsWith(normalizedBasicPathNoSlash + "/") ||
+        normalizedRequestPath === normalizedBasicPathNoSlash ||
+        normalizedRequestPath.endsWith(normalizedBasicPathNoSlash)) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -201,7 +216,7 @@ export class WebDAVAuth {
         if (!hasPathPermission) {
           return {
             type: AuthResultType.FORBIDDEN,
-            message: `路径权限不足 [debug: basicPath=${apiKeyInfo.basicPath || "/"}, path=${requestPath}, keyId=${apiKeyInfo.id || "unknown"}]`,
+            message: "路径权限不足",
           };
         }
       }
