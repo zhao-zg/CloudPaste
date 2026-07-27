@@ -7,6 +7,7 @@ import { getEncryptionSecret } from "../../utils/environmentUtils.js";
 import { FileSystem } from "../../storage/fs/FileSystem.js";
 import { createWebDAVErrorResponse, withWebDAVErrorHandling } from "../utils/errorUtils.js";
 import { getStandardWebDAVHeaders } from "../utils/headerUtils.js";
+import { stripUsernamePrefix } from "../utils/webdavUtils.js";
 
 /**
  * 处理MKCOL请求
@@ -18,6 +19,9 @@ import { getStandardWebDAVHeaders } from "../utils/headerUtils.js";
  */
 export async function handleMkcol(c, path, userId, userType, db) {
   return withWebDAVErrorHandling("MKCOL", async () => {
+    // 对 API Key 用户，剥离用户名前缀以匹配挂载点路径
+    const fsPath = stripUsernamePrefix(path, userId, userType);
+
     // 检查请求是否包含正文（基本MKCOL请求不应包含正文）
     // 符合RFC 4918标准：基本MKCOL不应包含请求体，扩展MKCOL可以包含XML
     const body = await c.req.text();
@@ -33,16 +37,16 @@ export async function handleMkcol(c, path, userId, userType, db) {
     const mountManager = new MountManager(db, getEncryptionSecret(c), repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager);
 
-    console.log(`WebDAV MKCOL - 开始创建目录: ${path}, 用户类型: ${userType}`);
+    console.log(`WebDAV MKCOL - 开始创建目录: ${fsPath}, 用户类型: ${userType}`);
 
     // 处理根目录特殊情况（符合WebDAV标准的特殊处理）
-    const pathParts = path.split("/").filter((p) => p);
+    const pathParts = fsPath.split("/").filter((p) => p);
     if (pathParts.length === 1) {
       console.log(`WebDAV MKCOL - 检测到根目录请求，执行存储驱动验证`);
 
       try {
         // 通过尝试获取挂载点信息来验证访问权限
-        const { mount } = await mountManager.getDriverByPath(path, userId, userType);
+        const { mount } = await mountManager.getDriverByPath(fsPath, userId, userType);
         console.log(`WebDAV MKCOL - 成功验证根目录访问权限，挂载点: ${mount.id}`);
 
         // 对于根目录请求，直接返回成功状态码（符合WebDAV标准处理）
@@ -63,8 +67,8 @@ export async function handleMkcol(c, path, userId, userType, db) {
 
     // 使用FileSystem统一抽象层创建目录
     try {
-      await fileSystem.createDirectory(path, userId, userType);
-      console.log(`WebDAV MKCOL - 目录创建成功: ${path}`);
+      await fileSystem.createDirectory(fsPath, userId, userType);
+      console.log(`WebDAV MKCOL - 目录创建成功: ${fsPath}`);
 
       // 返回成功响应（符合WebDAV MKCOL标准）
       return new Response(null, {

@@ -12,6 +12,7 @@ import { ValidationError } from "../../http/errors.js";
 import { getSettingsByGroup } from "../../services/systemService.js";
 import { lockManager } from "../utils/LockManager.js";
 import { checkLockPermission } from "../utils/lockUtils.js";
+import { stripUsernamePrefix } from "../utils/webdavUtils.js";
 
 /**
  * 获取WebDAV上传模式设置
@@ -64,6 +65,9 @@ function isReallyEmptyFile(contentLength, transferEncoding) {
  */
 export async function handlePut(c, path, userId, userType, db) {
   return withWebDAVErrorHandling("PUT", async () => {
+    // 对 API Key 用户，剥离用户名前缀以匹配挂载点路径
+    const fsPath = stripUsernamePrefix(path, userId, userType);
+
     // 获取加密密钥
     const encryptionSecret = getEncryptionSecret(c);
     if (!encryptionSecret) {
@@ -76,7 +80,7 @@ export async function handlePut(c, path, userId, userType, db) {
     const fileSystem = new FileSystem(mountManager);
 
     // 在PUT时自动创建父目录
-    const parentPath = path.substring(0, path.lastIndexOf("/"));
+    const parentPath = fsPath.substring(0, fsPath.lastIndexOf("/"));
     if (parentPath && parentPath !== "/" && parentPath !== "") {
       try {
         console.log(`WebDAV PUT - 确保父目录存在: ${parentPath}`);
@@ -100,7 +104,7 @@ export async function handlePut(c, path, userId, userType, db) {
 
     // 检查锁定状态
     const ifHeader = c.req.header("If");
-    const lockConflict = checkLockPermission(lockManager, path, ifHeader, "PUT");
+    const lockConflict = checkLockPermission(lockManager, fsPath, ifHeader, "PUT");
     if (lockConflict) {
       return new Response(lockConflict.message, {
         status: lockConflict.status,
@@ -115,8 +119,8 @@ export async function handlePut(c, path, userId, userType, db) {
     const declaredContentLength = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
 
     // 智能MIME类型检测：优先使用文件名推断，客户端类型作为备选
-    const contentType = getEffectiveMimeType(clientContentType, path);
-    const filename = path.split("/").pop();
+    const contentType = getEffectiveMimeType(clientContentType, fsPath);
+    const filename = fsPath.split("/").pop();
 
     // 使用智能空文件检测（在获取流之前先依赖头部信息判断）
     const isEmptyFile = isReallyEmptyFile(declaredContentLength, transferEncoding);
@@ -132,7 +136,7 @@ export async function handlePut(c, path, userId, userType, db) {
 
       // 使用 FileSystem 上传一个空文件
       const emptyBody = new Uint8Array(0);
-      const result = await fileSystem.uploadFile(path, emptyBody, userId, userType, {
+      const result = await fileSystem.uploadFile(fsPath, emptyBody, userId, userType, {
         filename,
         contentType,
         contentLength: 0,
@@ -180,7 +184,7 @@ export async function handlePut(c, path, userId, userType, db) {
         const effectiveLength = body.byteLength;
 
         const startTime = Date.now();
-        const result = await fileSystem.uploadFile(path, body, userId, userType, {
+        const result = await fileSystem.uploadFile(fsPath, body, userId, userType, {
           filename,
           contentType,
           contentLength: effectiveLength,
@@ -210,7 +214,7 @@ export async function handlePut(c, path, userId, userType, db) {
 
       try {
         const startTime = Date.now();
-        const result = await fileSystem.uploadFile(path, processedStream, userId, userType, {
+        const result = await fileSystem.uploadFile(fsPath, processedStream, userId, userType, {
           filename,
           contentType,
           contentLength: declaredContentLength,

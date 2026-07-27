@@ -11,7 +11,7 @@ import { createWebDAVErrorResponse, withWebDAVErrorHandling } from "../utils/err
 import { getStandardWebDAVHeaders } from "../utils/headerUtils.js";
 import { lockManager } from "../utils/LockManager.js";
 import { checkLockPermission } from "../utils/lockUtils.js";
-import { parseDestinationPath } from "../utils/webdavUtils.js";
+import { parseDestinationPath, stripUsernamePrefix } from "../utils/webdavUtils.js";
 
 /**
  * 处理WebDAV MOVE请求
@@ -24,7 +24,10 @@ import { parseDestinationPath } from "../utils/webdavUtils.js";
  */
 export async function handleMove(c, path, userId, userType, db) {
   return withWebDAVErrorHandling("MOVE", async () => {
-    console.log(`WebDAV MOVE - 开始处理: ${path}`);
+    // 对 API Key 用户，剥离用户名前缀以匹配挂载点路径
+    const fsPath = stripUsernamePrefix(path, userId, userType);
+
+    console.log(`WebDAV MOVE - 开始处理: ${fsPath}`);
 
     // 1. 解析WebDAV头部（与COPY方法完全一致）
     const destination = c.req.header("Destination");
@@ -36,8 +39,8 @@ export async function handleMove(c, path, userId, userType, db) {
 
     // 检查锁定状态
 
-    // 检查源路径的锁定状态（MOVE操作会删除源资源）
-    const sourceLockConflict = checkLockPermission(lockManager, path, ifHeader, "MOVE");
+    // 检查源路径的锁定状态（使用 fsPath）
+    const sourceLockConflict = checkLockPermission(lockManager, fsPath, ifHeader, "MOVE");
     if (sourceLockConflict) {
       console.log(`WebDAV MOVE - 源路径锁定冲突: ${path}`);
       return createWebDAVErrorResponse(sourceLockConflict.message, sourceLockConflict.status, false);
@@ -55,8 +58,9 @@ export async function handleMove(c, path, userId, userType, db) {
       return createWebDAVErrorResponse("MOVE操作只支持Depth: infinity", 412, false);
     }
 
-    // 4. 解析目标路径
-    const destPath = parseDestinationPath(destination);
+    // 4. 解析目标路径（也需要剥离用户名前缀）
+    const rawDestPath = parseDestinationPath(destination);
+    const destPath = stripUsernamePrefix(rawDestPath, userId, userType);
     if (!destPath) {
       console.error(`WebDAV MOVE - 无效的Destination URL: ${destination}`);
       return createWebDAVErrorResponse("无效的Destination URL", 400, false);
@@ -64,9 +68,9 @@ export async function handleMove(c, path, userId, userType, db) {
 
     console.log(`WebDAV MOVE - 目标路径: ${destPath}`);
 
-    // 5. 验证源路径和目标路径不能相同（RFC 4918标准）
-    if (path === destPath) {
-      console.warn(`WebDAV MOVE - 源路径和目标路径相同: ${path}`);
+    // 5. 验证源路径和目标路径不能相同（使用 fsPath 比较）
+    if (fsPath === destPath) {
+      console.warn(`WebDAV MOVE - 源路径和目标路径相同: ${fsPath}`);
       return createWebDAVErrorResponse("源路径和目标路径不能相同", 403, false);
     }
 
@@ -75,7 +79,7 @@ export async function handleMove(c, path, userId, userType, db) {
     const mountManager = new MountManager(db, getEncryptionSecret(c), repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager);
 
-    console.log(`WebDAV MOVE - 开始移动: ${path} -> ${destPath}, 用户类型: ${userType}`);
+    console.log(`WebDAV MOVE - 开始移动: ${fsPath} -> ${destPath}, 用户类型: ${userType}`);
 
     // 7. 检查目标是否已存在（用于确定返回的状态码）
     let destExists = false;
@@ -94,17 +98,17 @@ export async function handleMove(c, path, userId, userType, db) {
     }
 
     // 9. 第一步：执行复制操作（复用COPY方法的完整逻辑）
-    const copyResult = await fileSystem.copyItem(path, destPath, userId, userType, {
+    const copyResult = await fileSystem.copyItem(fsPath, destPath, userId, userType, {
       skipExisting: overwrite === "F", // Overwrite: F 表示不覆盖，即跳过已存在的文件
     });
 
     console.log(`WebDAV MOVE - 复制结果:`, copyResult);
 
     // 10. 第二步：删除源文件/目录（SabreDAV的"复制-删除"机制）
-    console.log(`WebDAV MOVE - 第二步：删除源文件 ${path}`);
+    console.log(`WebDAV MOVE - 第二步：删除源文件 ${fsPath}`);
 
     try {
-      const deleteResult = await fileSystem.batchRemoveItems([path], userId, userType);
+      const deleteResult = await fileSystem.batchRemoveItems([fsPath], userId, userType);
       console.log(`WebDAV MOVE - 删除结果: 成功=${deleteResult.success}, 失败=${deleteResult.failed?.length || 0}`);
 
       if (deleteResult.failed && deleteResult.failed.length > 0) {

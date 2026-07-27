@@ -13,6 +13,7 @@ import { getEffectiveMimeType } from "../../utils/fileUtils.js";
 import { LinkService } from "../../storage/link/LinkService.js";
 import { StorageStreaming, STREAMING_CHANNELS } from "../../storage/streaming/index.js";
 import { CAPABILITIES } from "../../storage/interfaces/capabilities/index.js";
+import { stripUsernamePrefix } from "../utils/webdavUtils.js";
 
 // Windows MiniRedir 302自动降级：
 // - 对同一路径，第一次请求按挂载策略走 302
@@ -83,6 +84,9 @@ async function downloadViaStreaming(mountManager, path, c, userId, userType) {
 export async function handleGet(c, path, userId, userType, db) {
     const isHead = c.req.method === "HEAD";
     return withWebDAVErrorHandling("GET", async () => {
+    // 对 API Key 用户，剥离用户名前缀以匹配挂载点路径
+    const fsPath = stripUsernamePrefix(path, userId, userType);
+
     const userAgent = c.req.header("User-Agent") || "";
     const isWindowsMiniRedirector =
       userAgent.includes("Microsoft-WebDAV") || userAgent.includes("WebDAV-MiniRedir");
@@ -93,7 +97,7 @@ export async function handleGet(c, path, userId, userType, db) {
     const fileSystem = new FileSystem(mountManager);
 
     // 获取文件名并统一从文件名推断MIME类型
-    const fileName = path.split("/").pop();
+    const fileName = fsPath.split("/").pop();
     const contentType = getEffectiveMimeType(null, fileName);
     console.log(`WebDAV GET - 从文件名[${fileName}]推断MIME类型: ${contentType}`);
 
@@ -106,7 +110,7 @@ export async function handleGet(c, path, userId, userType, db) {
     // 首先获取文件信息以检查条件请求
     let fileInfo;
     try {
-      fileInfo = await fileSystem.getFileInfo(path, userId, userType);
+      fileInfo = await fileSystem.getFileInfo(fsPath, userId, userType);
     } catch (error) {
       if (error.status === 404) {
         return createWebDAVErrorResponse("文件不存在", 404);
@@ -196,7 +200,7 @@ export async function handleGet(c, path, userId, userType, db) {
     }
 
     // 根据挂载点的 webdav_policy 配置决定处理方式
-    const { driver, mount, subPath } = await mountManager.getDriverByPath(path, userId, userType);
+    const { driver, mount, subPath } = await mountManager.getDriverByPath(fsPath, userId, userType);
 
     // Windows MiniRedir：同一路径第一次走 302，之后强制走本地代理
     const miniKey = path;
@@ -247,7 +251,7 @@ export async function handleGet(c, path, userId, userType, db) {
         }
 
         console.log(`WebDAV GET - 驱动不支持直链生成或未返回 URL，降级到本地代理`);
-        return downloadViaStreaming(mountManager, path, c, userId, userType);
+        return downloadViaStreaming(mountManager, fsPath, c, userId, userType);
       }
 
       case "use_proxy_url": {
@@ -259,7 +263,7 @@ export async function handleGet(c, path, userId, userType, db) {
           const linkService = new LinkService(db, encryptionSecret, repositoryFactory);
 
           // WebDAV 挂载基于 FS 视图路径，复用 FS External 链路
-          const storageLink = await linkService.getFsExternalLink(path, userId, userType, {
+          const storageLink = await linkService.getFsExternalLink(fsPath, userId, userType, {
             forceDownload: false,
             request: c.req.raw,
           });
@@ -285,7 +289,7 @@ export async function handleGet(c, path, userId, userType, db) {
         }
 
         console.warn(`WebDAV GET - use_proxy_url 策略下未生成 url_proxy 入口，降级到本地代理`);
-        return downloadViaStreaming(mountManager, path, c, userId, userType);
+        return downloadViaStreaming(mountManager, fsPath, c, userId, userType);
       }
 
       case "native_proxy":
@@ -309,7 +313,7 @@ export async function handleGet(c, path, userId, userType, db) {
           return addWebDAVHeaders(response);
         }
 
-        return downloadViaStreaming(mountManager, path, c, userId, userType);
+        return downloadViaStreaming(mountManager, fsPath, c, userId, userType);
       }
     }
   });

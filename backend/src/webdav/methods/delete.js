@@ -9,6 +9,7 @@ import { createWebDAVErrorResponse, withWebDAVErrorHandling } from "../utils/err
 import { getStandardWebDAVHeaders } from "../utils/headerUtils.js";
 import { lockManager } from "../utils/LockManager.js";
 import { checkLockPermission } from "../utils/lockUtils.js";
+import { stripUsernamePrefix } from "../utils/webdavUtils.js";
 
 /**
  * 处理DELETE请求
@@ -20,8 +21,11 @@ import { checkLockPermission } from "../utils/lockUtils.js";
  */
 export async function handleDelete(c, path, userId, userType, db) {
   return withWebDAVErrorHandling("DELETE", async () => {
+    // 对 API Key 用户，剥离用户名前缀以匹配挂载点路径
+    const fsPath = stripUsernamePrefix(path, userId, userType);
+
     const ifHeader = c.req.header("If");
-    const lockConflict = checkLockPermission(lockManager, path, ifHeader, "DELETE");
+    const lockConflict = checkLockPermission(lockManager, fsPath, ifHeader, "DELETE");
     if (lockConflict) {
       console.log(`WebDAV DELETE - 锁冲突: ${path}`);
       return new Response(lockConflict.message, {
@@ -32,7 +36,8 @@ export async function handleDelete(c, path, userId, userType, db) {
       });
     }
 
-    const pathParts = path.split("/").filter((p) => p);
+    // 根目录保护：使用剥离后的路径判断
+    const pathParts = fsPath.split("/").filter((p) => p);
     if (pathParts.length === 1) {
       return new Response("禁止删除挂载根目录", {
         status: 405,
@@ -46,8 +51,8 @@ export async function handleDelete(c, path, userId, userType, db) {
     const mountManager = new MountManager(db, getEncryptionSecret(c), repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager);
 
-    console.log(`WebDAV DELETE - 开始删除: ${path}, userType=${userType}`);
-    const result = await fileSystem.batchRemoveItems([path], userId, userType);
+    console.log(`WebDAV DELETE - 开始删除: ${fsPath}, userType=${userType}`);
+    const result = await fileSystem.batchRemoveItems([fsPath], userId, userType);
     console.log(`WebDAV DELETE - 删除结果: success=${result.success}, failed=${result.failed?.length || 0}`);
 
     if (result.failed && result.failed.length > 0) {

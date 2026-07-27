@@ -60,7 +60,7 @@ export class WebDAVAuth {
       //    实际的数据操作（GET/PUT/DELETE）在挂载点解析阶段会失败。
       const repositoryFactory = c.get("repos");
       const accessibleMounts = await getAccessibleMountsForUser(this.db, keyInfo, "apiKey", repositoryFactory);
-      if (isVirtualPath(path, accessibleMounts)) {
+      if (isVirtualPath(effectivePath, accessibleMounts)) {
         return true;
       }
 
@@ -69,12 +69,12 @@ export class WebDAVAuth {
         return false;
       }
 
-      // 3. 实际存储路径：保持原有挂载点 + 存储 ACL 校验逻辑
+      // 3. 实际存储路径：使用剥离前缀后的 effectivePath 进行挂载点解析
       const { getEncryptionSecret } = await import("../../../utils/environmentUtils.js");
       const mountManager = new MountManager(this.db, getEncryptionSecret(c), repositoryFactory, { env: c.env });
 
       try {
-        await mountManager.getDriverByPath(path, keyInfo, "apiKey");
+        await mountManager.getDriverByPath(effectivePath, keyInfo, "apiKey");
         return true;
       } catch (mountError) {
         return false;

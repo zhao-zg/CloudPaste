@@ -7,7 +7,7 @@ import { getEncryptionSecret } from "../../utils/environmentUtils.js";
 import { FileSystem } from "../../storage/fs/FileSystem.js";
 import { createWebDAVErrorResponse, withWebDAVErrorHandling } from "../utils/errorUtils.js";
 import { getStandardWebDAVHeaders } from "../utils/headerUtils.js";
-import { parseDestinationPath } from "../utils/webdavUtils.js";
+import { parseDestinationPath, stripUsernamePrefix } from "../utils/webdavUtils.js";
 import { lockManager } from "../utils/LockManager.js";
 import { checkLockPermission } from "../utils/lockUtils.js";
 
@@ -21,6 +21,9 @@ import { checkLockPermission } from "../utils/lockUtils.js";
  */
 export async function handleCopy(c, path, userId, userType, db) {
   return withWebDAVErrorHandling("COPY", async () => {
+    // 对 API Key 用户，剥离用户名前缀以匹配挂载点路径
+    const fsPath = stripUsernamePrefix(path, userId, userType);
+
     // 1. 解析WebDAV头部
     const destination = c.req.header("Destination");
     const overwrite = c.req.header("Overwrite") || "T";
@@ -35,8 +38,9 @@ export async function handleCopy(c, path, userId, userType, db) {
       return createWebDAVErrorResponse("缺少Destination头", 400, false);
     }
 
-    // 3. 解析目标路径
-    const destPath = parseDestinationPath(destination);
+    // 3. 解析目标路径（也需要剥离用户名前缀）
+    const rawDestPath = parseDestinationPath(destination);
+    const destPath = stripUsernamePrefix(rawDestPath, userId, userType);
     if (!destPath) {
       console.warn(`WebDAV COPY - 无效的Destination头: ${destination}`);
       return createWebDAVErrorResponse("无效的Destination头", 400, false);
@@ -50,8 +54,8 @@ export async function handleCopy(c, path, userId, userType, db) {
     }
 
     // 4. 检查源路径和目标路径是否相同
-    if (path === destPath) {
-      console.warn(`WebDAV COPY - 源路径和目标路径相同: ${path}`);
+    if (fsPath === destPath) {
+      console.warn(`WebDAV COPY - 源路径和目标路径相同: ${fsPath}`);
       return createWebDAVErrorResponse("源路径和目标路径不能相同", 403, false);
     }
 
@@ -66,7 +70,7 @@ export async function handleCopy(c, path, userId, userType, db) {
     const mountManager = new MountManager(db, getEncryptionSecret(c), repositoryFactory, { env: c.env });
     const fileSystem = new FileSystem(mountManager);
 
-    console.log(`WebDAV COPY - 开始复制: ${path} -> ${destPath}, 用户类型: ${userType}`);
+    console.log(`WebDAV COPY - 开始复制: ${fsPath} -> ${destPath}, 用户类型: ${userType}`);
 
     // 7. 检查目标是否已存在（用于确定返回的状态码）
     let destExists = false;
@@ -86,7 +90,7 @@ export async function handleCopy(c, path, userId, userType, db) {
 
     // 9. 使用FileSystem统一抽象层执行复制
     // 将WebDAV的Overwrite头映射为FileSystem的skipExisting选项
-    const result = await fileSystem.copyItem(path, destPath, userId, userType, {
+    const result = await fileSystem.copyItem(fsPath, destPath, userId, userType, {
       skipExisting: overwrite === "F", // Overwrite: F 表示不覆盖，即跳过已存在的文件
     });
 
@@ -94,11 +98,11 @@ export async function handleCopy(c, path, userId, userType, db) {
 
     // 10. 处理跳过的情况（这种情况理论上不应该发生，因为我们已经预先检查了）
     if (result.skipped === true || result.status === "skipped") {
-      console.warn(`WebDAV COPY - 复制被跳过: ${path} -> ${destPath}`);
+      console.warn(`WebDAV COPY - 复制被跳过: ${fsPath} -> ${destPath}`);
       return createWebDAVErrorResponse("目标已存在且不允许覆盖", 412, false); // Precondition Failed
     }
 
-    console.log(`WebDAV COPY - 复制成功: ${path} -> ${destPath}`);
+    console.log(`WebDAV COPY - 复制成功: ${fsPath} -> ${destPath}`);
 
     // 13. 返回成功响应（符合WebDAV COPY标准）
     // 根据目标是否已存在返回正确的状态码

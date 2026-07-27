@@ -85,3 +85,25 @@ export function parseDestinationPath(destination) {
   // 使用统一的路径处理函数
   return processWebDAVPath(destPath, false);
 }
+
+/**
+ * 剥离 API Key 用户名前缀
+ * WebDAV 路径格式为 /{username}/mount/...，而挂载点路径是 /mount/...，
+ * 剥离后可与 MountResolver/findMountPointByPath 正确匹配。
+ * @param {string} path - 原始请求路径（已剥离 /dav 前缀）
+ * @param {Object} userIdOrInfo - 用户ID或API密钥信息对象
+ * @param {string} userType - 用户类型
+ * @returns {string} 剥离用户名前缀后的文件系统路径
+ */
+export function stripUsernamePrefix(path, userIdOrInfo, userType) {
+  if (userType === "apiKey" && typeof userIdOrInfo === "object" && userIdOrInfo?.name) {
+    const prefix = "/" + userIdOrInfo.name;
+    if (path === prefix || path === prefix + "/") {
+      return "/";
+    }
+    if (path.startsWith(prefix + "/")) {
+      return path.substring(prefix.length) || "/";
+    }
+  }
+  return path;
+}
