@@ -615,11 +615,13 @@ async function processPropfindRequest(path, requestInfo, userIdOrInfo, actualUse
     // WebDAVAuth 中间件已对路径权限做过全面校验（isVirtualPath + basicPath + mount 解析），
     // 此处跳过 canNavigatePath 二次检查，避免路径格式 /{username}/mount/... 与 basicPath 不匹配的重复问题。
 
-    // 获取用户可访问的挂载点列表
-    const mounts = await getAccessibleMountsForUser(db, userIdOrInfo, actualUserType);
-    console.log(`[PROPFIND] path=${path}, fsPath pending, userType=${actualUserType}, mounts=${mounts?.length}, keyName=${userIdOrInfo?.name}, basicPath=${userIdOrInfo?.basicPath}`);
+    // 获取用户可访问的挂载点列表（传入 repositoryFactory 以复用已有的仓储实例）
+    const mounts = await getAccessibleMountsForUser(db, userIdOrInfo, actualUserType, repositoryFactory);
+    console.log(`[PROPFIND] path=${path}, userType=${actualUserType}, mounts=${mounts?.length}, keyName=${userIdOrInfo?.name}, basicPath=${userIdOrInfo?.basicPath}`);
     if (mounts?.length > 0) {
       console.log(`[PROPFIND] mount[0]=${JSON.stringify({id: mounts[0].id, name: mounts[0].name, mount_path: mounts[0].mount_path, is_public: mounts[0].is_public})}`);
+    } else {
+      console.log(`[PROPFIND] WARNING: no accessible mounts found for this user`);
     }
 
     // 对 API Key 用户，剥离用户名前缀后再做虚拟路径判断：
@@ -640,7 +642,11 @@ async function processPropfindRequest(path, requestInfo, userIdOrInfo, actualUse
     if (isVPath) {
       // 处理虚拟目录（使用 fsPath，不含用户名前缀）
       const basicPath = actualUserType === UserType.API_KEY ? userIdOrInfo.basicPath : null;
-      return await handleVirtualDirectoryPropfind(mounts, fsPath, basicPath, requestInfo, path);
+      const result = await handleVirtualDirectoryPropfind(mounts, fsPath, basicPath, requestInfo, path);
+      // 临时调试：附加关键信息到响应头，便于诊断根目录为空的问题
+      const debugHeaders = new Headers(result.headers);
+      debugHeaders.set('X-WebDAV-Debug', `mounts=${mounts?.length}|fsPath=${fsPath}|basicPath=${basicPath}|keyName=${userIdOrInfo?.name}`);
+      return new Response(result.body, { status: result.status, headers: debugHeaders });
     }
 
     // 处理实际存储路径（也使用 fsPath，去掉用户名前缀以匹配挂载点路径）

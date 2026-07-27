@@ -387,7 +387,9 @@ export async function getAccessibleMountsByBasicPath(db, basicPath, subjectType,
     // basicPath 匹配的挂载点对已认证的 API Key 用户应始终可访问，
     // 不受存储配置 is_public 限制（WebDAV 场景下用户已通过认证）
     const normalizedBasicPath = basicPath === "/" ? "/" : basicPath.replace(/\/+$/, "");
-    const normalizedMountPath = mount.mount_path.replace(/\/+$/, "") || "/";
+    // 规范化挂载路径：确保前导斜杠 + 去除尾随斜杠，与 MountResolver.normalizeMountPath 保持一致
+    const rawMountPath = mount.mount_path.startsWith("/") ? mount.mount_path : "/" + mount.mount_path;
+    const normalizedMountPath = rawMountPath.replace(/\/+$/, "") || "/";
     let basicPathMatch = false;
     if (normalizedBasicPath === "/") {
       basicPathMatch = true;
