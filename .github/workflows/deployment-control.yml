@@ -1,5 +1,7 @@
 name: 🎛️ 部署控制面板[⭐Click ME] / Deployment Control Panel
 
+retention-days: 1
+
 on:
   workflow_dispatch:
     inputs:
@@ -353,3 +355,4 @@ jobs:
             echo "建议只启用一种部署方式以避免重复部署。 / It is recommended to enable only one mode to avoid duplicate deployments."
             echo ""
           fi
+
