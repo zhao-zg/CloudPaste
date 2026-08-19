@@ -1,7 +1,5 @@
 name: Deploy Backend CF Workers[Worker后端分离部署]
 
-retention-days: 1
-
 on:
   push:
     branches: [main, master]

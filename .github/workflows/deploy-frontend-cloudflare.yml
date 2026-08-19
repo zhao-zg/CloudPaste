@@ -1,7 +1,5 @@
 name: Deploy Frontend CF Pages[Pages前端分离部署]
 
-retention-days: 1
-
 on:
   push:
     branches: [main, master]

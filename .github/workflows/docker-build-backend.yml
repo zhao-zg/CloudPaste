@@ -1,7 +1,5 @@
 name: Build and Push backend Docker Image
 
-retention-days: 1
-
 on:
   workflow_dispatch:
     inputs:

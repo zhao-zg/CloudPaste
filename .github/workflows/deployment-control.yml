@@ -1,7 +1,5 @@
 name: 🎛️ 部署控制面板[⭐Click ME] / Deployment Control Panel
 
-retention-days: 1
-
 on:
   workflow_dispatch:
     inputs:

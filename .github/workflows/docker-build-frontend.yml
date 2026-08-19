@@ -1,7 +1,5 @@
 name:  Build and Push Frontend Docker Image
 
-retention-days: 1
-
 on:
   workflow_dispatch:
     inputs:

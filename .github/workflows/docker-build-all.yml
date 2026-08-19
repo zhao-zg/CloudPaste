@@ -1,7 +1,5 @@
 name: Build and Push all Docker Image
 
-retention-days: 1
-
 on:
   workflow_dispatch:
     inputs:
